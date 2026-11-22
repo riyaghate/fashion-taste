@@ -9,6 +9,10 @@ Expected layout (the official download, extracted):
     nondisjoint/fill_in_blank_{train,valid,test}.json
     disjoint/...   (same files)
 
+The Hugging Face copy (mvasil/polyvore-outfits) ships images inside Parquet files
+(data/{disjoint,nondisjoint}/*.parquet with columns item_id, image.bytes); run with
+--extract once to write them out as images/<item_id>.jpg.
+
 Run `python -m fashion_taste.data --data <folder>` to check the folder is complete.
 """
 import argparse
@@ -97,6 +101,31 @@ def load(root, split="nondisjoint"):
     return ds
 
 
+def extract_parquet_images(root):
+    """Write images/<item_id>.jpg from the Hugging Face Parquet shards (skips ones already written)."""
+    import pyarrow.parquet as pq
+    from tqdm.auto import tqdm
+    root = Path(root)
+    out = root / "images"
+    out.mkdir(exist_ok=True)
+    seen = {f.stem for f in out.glob("*.jpg")}
+    files = sorted((root / "data").glob("*/*.parquet"))
+    if not files:
+        print("no Parquet files under", root / "data")
+        return len(seen)
+    for f in files:
+        pf = pq.ParquetFile(f)
+        for i in tqdm(range(pf.num_row_groups), desc=f"{f.parent.name}/{f.name}"):
+            for r in pf.read_row_group(i, columns=["item_id", "image"]).to_pylist():
+                iid, im = str(r["item_id"]), r["image"]
+                if iid in seen or not im or not im.get("bytes"):
+                    continue
+                (out / f"{iid}.jpg").write_bytes(im["bytes"])
+                seen.add(iid)
+    print(f"{len(seen):,} images in {out}")
+    return len(seen)
+
+
 def check(root, split):
     root = Path(root)
     need = [root / "polyvore_item_metadata.json", root / "images"]
@@ -118,5 +147,8 @@ def check(root, split):
 
 if __name__ == "__main__":
     p = add_path_args(argparse.ArgumentParser())
+    p.add_argument("--extract", action="store_true", help="write images/ from the Parquet shards first")
     a = p.parse_args()
+    if a.extract:
+        extract_parquet_images(a.data)
     raise SystemExit(0 if check(a.data, a.split) else 1)

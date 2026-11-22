@@ -6,8 +6,9 @@ scikit-learn
 scipy
 pandas
 matplotlib
-pillow
+pillow<13
 tqdm
 gdown
 rembg
 onnxruntime
+pyarrow

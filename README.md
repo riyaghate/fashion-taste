@@ -47,15 +47,6 @@ switch to a T4 GPU, and run the cells in order. Everything saves to Google Drive
 
 Everyone: slides (presentation **Dec 8**) and report (8 pages, IEEE format, due **Dec 10**).
 
-## Timeline
-| Dates | Milestone |
-|---|---|
-| Sun 11/22 – Tue 11/24 | Data in Drive; embeddings, attributes, trick outfits; train head; **survey sent out**; Gemini `direct` starts |
-| Wed 11/25 – Sun 11/29 | Fine-tuning runs; Gemini strategies keep running daily; validation labeling |
-| Mon 11/30 – Thu 12/3 | Survey closes; evaluate + figures; demo photos; draft slides; email the TA for a practice run |
-| Fri 12/4 – Mon 12/7 | Slides final, rehearse demo and Q&A |
-| **Tue 12/8** | **Presentation** |
-| Wed 12/9 – Thu 12/10 | Final numbers into the report; **submit by 12/10 11:59pm** |
 
 ## Data and references
 - Polyvore Outfits: M. I. Vasileva et al., *Learning Type-Aware Embeddings for Fashion Compatibility*, ECCV 2018.

@@ -191,12 +191,16 @@ def validate(out_dir, results_dir, files=None, pass_threshold=0.7):
         raise SystemExit(f"need two filled label files in {out_dir} (validation_labels_<name>.csv)")
     labs = []
     for f in files[:2]:
-        d = pd.read_csv(f)
-        d["label"] = d["label"].astype(str).str.strip().str.lower()
+        d = pd.read_csv(f, dtype={"label": str})
+        d["label"] = d["label"].str.strip().str.lower().replace({"": None, "nan": None})
         labs.append(d.set_index("case")["label"])
     df = key.set_index("case").copy()
     df["l1"], df["l2"] = labs[0], labs[1]
-    df = df.dropna(subset=["l1", "l2"])
+    df = df.dropna(subset=["l1", "l2"])  # only cases BOTH labelers finished (labeling can stop early)
+    bad = sorted(set(df["l1"]).union(df["l2"]) - set(LABEL_CHOICES))
+    if bad:
+        print(f"WARNING: unexpected labels {bad} (allowed: {LABEL_CHOICES}); fix typos in the label files")
+    print(f"{len(df)} cases labelled by both labelers")
     expected = df["rule"].where(df["rule"] != "control", "none")
     rows = []
     for rule, g in df.groupby("rule"):
@@ -212,6 +216,7 @@ def validate(out_dir, results_dir, files=None, pass_threshold=0.7):
                "raw_agreement": float((df["l1"] == df["l2"]).mean()),
                "single_rule_rate": float(((df["l1"] == expected) & (df["l2"] == expected) & (df["rule"] != "control")).sum()
                                          / max(1, (df["rule"] != "control").sum())),
+               "n_cases_both_labelled": int(len(df)),
                "labeler_files": [str(f) for f in files[:2]]}
     summ.to_csv(results_dir / "validation_summary.csv", index=False)
     (results_dir / "validation_overall.json").write_text(json.dumps(overall, indent=2))

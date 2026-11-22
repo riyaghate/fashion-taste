@@ -40,16 +40,25 @@ switch to a T4 GPU, and run the cells in order. Everything saves to Google Drive
 ## Team roles
 | Person | Owns | Manual work |
 |---|---|---|
-| Riya Ghate (nmy4vs) | Colab runs: data, embeddings, training (cells 1–10, 15–16) | Get the dataset into Drive; keep the fine-tuning tab alive |
+| Riya Ghate (nmy4vs) | Colab runs: data, embeddings, training (cells 1–10, 15–16) | Run the data download (cell 5); keep the fine-tuning tab alive |
 | Member 2 | Gemini runs (cell 12) and prompting ablation | Get the API key, re-run daily until done; validation labeler #1 |
 | Member 3 | Trick outfits and validation (cells 8, 13) | Validation labeler #2; spot-check examples |
 | Member 4 | Survey and demo (cells 11, 14, 17) | Build the form, **send it out by 11/24**, get 20+ responses; take demo photos |
 
 Everyone: slides (presentation **Dec 8**) and report (8 pages, IEEE format, due **Dec 10**).
 
+## Timeline
+| Dates | Milestone |
+|---|---|
+| Sun 11/22 – Tue 11/24 | Data downloaded; embeddings, attributes, trick outfits; train head; **survey sent out**; Gemini `direct` starts |
+| Wed 11/25 – Sun 11/29 | Fine-tuning runs; Gemini strategies keep running daily; validation labeling |
+| Mon 11/30 – Thu 12/3 | Survey closes; evaluate + figures; demo photos; draft slides; email the TA for a practice run |
+| Fri 12/4 – Mon 12/7 | Slides final, rehearse demo and Q&A |
+| **Tue 12/8** | **Presentation** |
+| Wed 12/9 – Thu 12/10 | Final numbers into the report; **submit by 12/10 11:59pm** |
 
 ## Data and references
 - Polyvore Outfits: M. I. Vasileva et al., *Learning Type-Aware Embeddings for Fashion Compatibility*, ECCV 2018.
-  Dataset: https://github.com/mvasil/fashion-compatibility (not redistributed here).
+  Dataset: https://github.com/mvasil/fashion-compatibility, hosted on Hugging Face (mvasil/polyvore-outfits); downloaded at run time, not stored in this repo.
 - CLIP: A. Radford et al., ICML 2021 (`openai/clip-vit-base-patch32` via Hugging Face).
 - Survey responses are anonymous and used only for this course project; raw responses and demo photos are git-ignored.

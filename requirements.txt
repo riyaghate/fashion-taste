@@ -1,0 +1,13 @@
+# torch and torchvision come preinstalled on Colab; install them yourself elsewhere.
+transformers>=4.40
+google-genai>=1.0
+krippendorff>=0.6
+scikit-learn
+scipy
+pandas
+matplotlib
+pillow
+tqdm
+gdown
+rembg
+onnxruntime

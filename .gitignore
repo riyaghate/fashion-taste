@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+# data and outputs live in Google Drive, never in git
+data/
+work/
+*.tar.gz
+*.pt
+*.npy
+# survey responses and photos of people's clothes stay private
+demo_photos/
+demo_closet/
+responses.csv
+.env

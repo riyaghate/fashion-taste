@@ -97,14 +97,25 @@ class Gemini:
         self.last = 0.0
 
     def check(self):
-        """One tiny request before a long run, so a wrong model name or key fails immediately."""
-        try:
-            self.client.models.generate_content(model=self.model, contents=["Reply with the word OK."])
-        except Exception as e:
-            raise SystemExit(f"\nGemini test request failed for model '{self.model}':\n{str(e)[:500]}\n\n"
-                             "Fix: set GEMINI_MODEL in the first cell of section 12 to a model listed in "
-                             "Google AI Studio for your key (check the exact name there), then re-run.")
-        print(f"Gemini model '{self.model}' OK")
+        """One tiny request before a long run, so a wrong model name or key fails immediately.
+        Temporary overloads (503/500/429) are retried for ~5 minutes instead of stopping."""
+        for attempt in range(6):
+            try:
+                self.client.models.generate_content(model=self.model, contents=["Reply with the word OK."])
+                print(f"Gemini model '{self.model}' OK")
+                return
+            except Exception as e:
+                msg = str(e)
+                temporary = any(s in msg for s in ("503", "500", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"))
+                if temporary and attempt < 5:
+                    print(f"Gemini is busy ({msg[:60]}...), retrying in {30 * (attempt + 1)}s")
+                    time.sleep(30 * (attempt + 1))
+                    continue
+                hint = ("Google's servers are overloaded right now - try again later."
+                        if temporary else
+                        "Set GEMINI_MODEL in the first cell of section 12 to a model listed in "
+                        "Google AI Studio for your key (check the exact name there), then re-run.")
+                raise SystemExit(f"\nGemini test request failed for model '{self.model}':\n{msg[:500]}\n\n{hint}")
 
     def __call__(self, parts):
         """parts: list of str or PIL images. Returns response text. Raises QuotaExhausted / FatalError."""

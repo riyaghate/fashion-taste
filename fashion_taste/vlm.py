@@ -198,22 +198,26 @@ def run(ds, P, strategy, client, tasks, max_calls=None):
     shots = fewshot_examples(ds) if strategy == "fewshot" else ([], [])
     from tqdm.auto import tqdm
     calls = 0
-    with path.open("a") as f:
-        for t in tqdm(todo, desc=strategy):
-            if max_calls and calls >= max_calls:
-                print(f"reached --max_calls {max_calls}; re-run to continue")
-                break
-            parts, want = build_parts(ds, t, strategy, shots)
-            try:
-                text = client(parts)
-            except QuotaExhausted as e:
-                print(f"\nQuota exhausted ({e}).\nProgress is saved - re-run this cell later (e.g. tomorrow) to continue.")
-                break
-            calls += 1
-            val = parse(text, want)
-            f.write(json.dumps({"key": f"{t['task']}:{t['id']}", "task": t["task"], "id": t["id"],
-                                want: val, "raw": text}) + "\n")
+    for t in tqdm(todo, desc=strategy):
+        if max_calls and calls >= max_calls:
+            print(f"reached --max_calls {max_calls}; re-run to continue")
+            break
+        parts, want = build_parts(ds, t, strategy, shots)
+        try:
+            text = client(parts)
+        except QuotaExhausted as e:
+            print(f"\nQuota exhausted ({e}).\nProgress is saved - re-run this cell later (e.g. tomorrow) to continue.")
+            break
+        calls += 1
+        val = parse(text, want)
+        line = json.dumps({"key": f"{t['task']}:{t['id']}", "task": t["task"], "id": t["id"],
+                           want: val, "raw": text}) + "\n"
+        # open-write-fsync-close for EVERY answer: Colab's Drive mount only uploads reliably when a
+        # file is closed, so a file kept open is lost if the session is cut off.
+        with path.open("a") as f:
+            f.write(line)
             f.flush()
+            os.fsync(f.fileno())
     df = cache_to_csv(P, strategy)
     if len(df):
         print(f"[{strategy}] answered {len(df)}; unparseable: {(~df['parsed']).sum()}")

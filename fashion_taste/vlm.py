@@ -69,6 +69,8 @@ def fitb_prompt(strategy):
 
 def parse(text, want):
     text = text or ""
+    if text.startswith("ERROR"):
+        return None
     try:
         obj = json.loads(re.search(r"\{.*\}", text, re.S).group(0))
         if want == "score":
@@ -94,8 +96,18 @@ class Gemini:
         self.model, self.gap, self.temp = model, 60.0 / rpm, temperature
         self.last = 0.0
 
+    def check(self):
+        """One tiny request before a long run, so a wrong model name or key fails immediately."""
+        try:
+            self.client.models.generate_content(model=self.model, contents=["Reply with the word OK."])
+        except Exception as e:
+            raise SystemExit(f"\nGemini test request failed for model '{self.model}':\n{str(e)[:500]}\n\n"
+                             "Fix: set GEMINI_MODEL in the first cell of section 12 to a model listed in "
+                             "Google AI Studio for your key (check the exact name there), then re-run.")
+        print(f"Gemini model '{self.model}' OK")
+
     def __call__(self, parts):
-        """parts: list of str or PIL images. Returns response text. Raises QuotaExhausted."""
+        """parts: list of str or PIL images. Returns response text. Raises QuotaExhausted / FatalError."""
         contents = [self.types.Part.from_bytes(data=to_jpeg_bytes(p), mime_type="image/jpeg")
                     if not isinstance(p, str) else p for p in parts]
         cfg = self.types.GenerateContentConfig(temperature=self.temp, response_mime_type="application/json")
@@ -112,6 +124,8 @@ class Gemini:
                     if "per day" in msg.lower() or "PerDay" in msg or attempt >= 4:
                         raise QuotaExhausted(msg[:300])
                     time.sleep(30 * (attempt + 1))
+                elif "404" in msg or "NOT_FOUND" in msg or "401" in msg or "403" in msg or "API key" in msg:
+                    raise FatalError(msg[:400])  # wrong model name / key: retrying cannot help
                 elif "500" in msg or "503" in msg or "UNAVAILABLE" in msg or "deadline" in msg.lower():
                     time.sleep(10 * (attempt + 1))
                 else:
@@ -120,6 +134,10 @@ class Gemini:
 
 
 class QuotaExhausted(Exception):
+    pass
+
+
+class FatalError(Exception):
     pass
 
 
@@ -164,9 +182,14 @@ def load_cache(path):
         for line in path.read_text().splitlines():
             try:
                 r = json.loads(line)
-                done[r["key"]] = r
             except json.JSONDecodeError:
                 continue
+            if str(r.get("raw") or "").startswith("ERROR"):
+                done.pop(r["key"], None)  # failed request: not done, will be retried
+                continue
+            want = "choice" if r.get("task") == "fitb" else "score"
+            r[want] = parse(r.get("raw"), want)  # re-read with the current parser
+            done[r["key"]] = r
     return done
 
 
@@ -197,23 +220,39 @@ def run(ds, P, strategy, client, tasks, max_calls=None):
     print(f"[{strategy}] {len(done)} cached, {len(todo)} to go")
     shots = fewshot_examples(ds) if strategy == "fewshot" else ([], [])
     from tqdm.auto import tqdm
-    calls = 0
-    with path.open("a") as f:
-        for t in tqdm(todo, desc=strategy):
-            if max_calls and calls >= max_calls:
-                print(f"reached --max_calls {max_calls}; re-run to continue")
+    calls, errors_in_a_row = 0, 0
+    for t in tqdm(todo, desc=strategy):
+        if max_calls and calls >= max_calls:
+            print(f"reached --max_calls {max_calls}; re-run to continue")
+            break
+        parts, want = build_parts(ds, t, strategy, shots)
+        try:
+            text = client(parts)
+        except QuotaExhausted as e:
+            print(f"\nQuota exhausted ({e}).\nProgress is saved - re-run this cell later (e.g. tomorrow) to continue.")
+            break
+        except FatalError as e:
+            print(f"\nSTOPPED: Gemini returned an error that retrying will not fix:\n{e}\n"
+                  "Nothing wrong was saved. Fix the model name / key and re-run.")
+            break
+        calls += 1
+        if str(text).startswith("ERROR"):
+            errors_in_a_row += 1
+            print(f"\nrequest failed (not saved, will be retried next run): {str(text)[:200]}")
+            if errors_in_a_row >= 5:
+                print("STOPPED after 5 failed requests in a row. Nothing wrong was saved.")
                 break
-            parts, want = build_parts(ds, t, strategy, shots)
-            try:
-                text = client(parts)
-            except QuotaExhausted as e:
-                print(f"\nQuota exhausted ({e}).\nProgress is saved - re-run this cell later (e.g. tomorrow) to continue.")
-                break
-            calls += 1
-            val = parse(text, want)
-            f.write(json.dumps({"key": f"{t['task']}:{t['id']}", "task": t["task"], "id": t["id"],
-                                want: val, "raw": text}) + "\n")
+            continue
+        errors_in_a_row = 0
+        val = parse(text, want)
+        line = json.dumps({"key": f"{t['task']}:{t['id']}", "task": t["task"], "id": t["id"],
+                           want: val, "raw": text}) + "\n"
+        # open-write-fsync-close for EVERY answer: Colab's Drive mount only uploads reliably when a
+        # file is closed, so a file kept open is lost if the session is cut off.
+        with path.open("a") as f:
+            f.write(line)
             f.flush()
+            os.fsync(f.fileno())
     df = cache_to_csv(P, strategy)
     if len(df):
         print(f"[{strategy}] answered {len(df)}; unparseable: {(~df['parsed']).sum()}")
@@ -222,7 +261,7 @@ def run(ds, P, strategy, client, tasks, max_calls=None):
 def main():
     p = add_path_args(argparse.ArgumentParser())
     p.add_argument("--strategies", default="direct", help=f"comma list from {STRATEGIES}")
-    p.add_argument("--model", default=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+    p.add_argument("--model", default=os.environ.get("GEMINI_MODEL", "gemini-3.8-flash"),
                    help="any vision-capable Gemini model name from Google AI Studio")
     p.add_argument("--rpm", type=float, default=8, help="requests per minute (stay under your quota)")
     p.add_argument("--max_calls", type=int, default=None, help="stop after this many calls this run")
@@ -252,6 +291,7 @@ def main():
     if not key:
         raise SystemExit("set GEMINI_API_KEY first")
     client = Gemini(a.model, key, a.rpm)
+    client.check()
     for s in strategies:
         assert s in STRATEGIES, s
         run(ds, P, s, client, tasks, a.max_calls)

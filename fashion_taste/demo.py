@@ -116,7 +116,7 @@ def gemini_rate(paths):
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         return None, ""
-    g = Gemini(os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"), key, rpm=8)
+    g = Gemini(os.environ.get("GEMINI_MODEL", "gemini-3.8-flash"), key, rpm=8)
     im = collage(paths, labels=list(range(1, len(paths) + 1)))
     text = g([im, rating_prompt("reason")])
     s = parse(text, "score")
